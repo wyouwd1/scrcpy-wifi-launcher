@@ -75,6 +75,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 也可以设环境变量 `SCRCPY_MIRROR`。镜像属于**你自己选择的信任对象**，本仓库不为其可用性或安全性背书；不想用镜像就走上面的手动安装。
 
+### 连 install.ps1 都下载不动时
+
+`raw.githubusercontent.com` 在部分网络完全不可达。改用 jsDelivr 拉安装脚本（后续步骤会自动回退到同一 CDN）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://cdn.jsdelivr.net/gh/wyouwd1/scrcpy-wifi-launcher@main/install.ps1 -OutFile $env:TEMP\scrcpy-install.ps1; & $env:TEMP\scrcpy-install.ps1"
+```
+
 ### 启动器脚本的下载源
 
 安装器需要下载 `start-scrcpy.bat`、`wifi-discover.ps1`、`uninstall.ps1` 三个脚本，会依次尝试：
