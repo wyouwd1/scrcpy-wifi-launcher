@@ -13,3 +13,7 @@ scrcpy-win64-*/
 
 # 临时目录
 temp/
+
+# CI 生成物
+test-results.xml
+analyzer-results.txt

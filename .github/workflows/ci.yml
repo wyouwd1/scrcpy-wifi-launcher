@@ -257,6 +257,8 @@ jobs:
           $files = @(Get-ChildItem -Path $root -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
               $_.FullName -notmatch '\\\.git\\' -and
               $_.FullName -notmatch '\\\.github\\' -and
+              # CI 运行过程中生成的产物不参与扫描（Pester 的 XML 里可能带 runner 内网地址）。
+              $_.Name -notin @('test-results.xml', 'analyzer-results.txt') -and
               $_.Length -lt 2MB -and
               ($textExtensions -contains $_.Extension.ToLower() -or $_.Name -in @('LICENSE', '.gitignore', '.gitattributes'))
           })
