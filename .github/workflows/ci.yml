@@ -1,0 +1,345 @@
+# scrcpy-wifi-launcher 持续集成质量门禁
+# 触发：push 到 main、所有 Pull Request、手动 workflow_dispatch
+# 矩阵：Windows PowerShell 5.1（powershell）与 PowerShell 7（pwsh）各跑一遍
+# 说明：内联 PowerShell 脚本输出刻意保持 ASCII，避免 Windows PowerShell 5.1
+#       按 ANSI 代码页读取 UTF-8 临时脚本时中文乱码。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支/PR 有新提交时取消旧运行，节省 runner 时间
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: 质量门禁（${{ matrix.shell }}）
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # powershell = Windows PowerShell 5.1；pwsh = PowerShell 7
+        shell: [powershell, pwsh]
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 校验 src/*.bat 为 ASCII-only
+        shell: ${{ matrix.shell }}
+        run: |
+          # 启动 BAT 必须全部是 ASCII 字节，避免 cmd.exe 代码页导致中文乱码。
+          # 逐个字节检查，任何 byte > 127 即失败。
+          $ErrorActionPreference = 'Stop'
+          $files = @(Get-ChildItem -Path 'src' -Filter '*.bat' -File -ErrorAction SilentlyContinue)
+          if ($files.Count -eq 0) {
+              Write-Host '::error::No .bat file found under src/.'
+              exit 1
+          }
+          $failed = $false
+          foreach ($file in $files) {
+              $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+              $badOffsets = New-Object System.Collections.Generic.List[int]
+              for ($i = 0; $i -lt $bytes.Length; $i++) {
+                  if ($bytes[$i] -gt 127) { $badOffsets.Add($i) }
+              }
+              if ($badOffsets.Count -gt 0) {
+                  $failed = $true
+                  $preview = ($badOffsets | Select-Object -First 10) -join ', '
+                  Write-Host "::error file=$($file.FullName)::$($file.Name) contains $($badOffsets.Count) non-ASCII byte(s); first offsets: $preview"
+              } else {
+                  Write-Host "OK: $($file.Name) is ASCII-only."
+              }
+          }
+          if ($failed) { exit 1 }
+
+      - name: 校验 BAT/PS1 为 CRLF
+        shell: ${{ matrix.shell }}
+        run: |
+          # 检测孤立 LF（前一个字节不是 CR），即存在非 CRLF 换行就失败。
+          $ErrorActionPreference = 'Stop'
+          $targets = @()
+          foreach ($dir in @('src', 'scripts', 'tests')) {
+              if (Test-Path -LiteralPath $dir) {
+                  $targets += @(Get-ChildItem -LiteralPath $dir -Recurse -File -ErrorAction SilentlyContinue |
+                      Where-Object { $_.Extension -in @('.ps1', '.bat', '.cmd') })
+              }
+          }
+          if ($targets.Count -eq 0) {
+              Write-Host 'No BAT/PS1 files found; skipping CRLF check.'
+              exit 0
+          }
+          $failed = $false
+          foreach ($file in $targets) {
+              $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+              $loneLf = 0
+              $firstOffset = -1
+              for ($i = 0; $i -lt $bytes.Length; $i++) {
+                  if ($bytes[$i] -eq 10) {
+                      if ($i -eq 0 -or $bytes[$i - 1] -ne 13) {
+                          $loneLf++
+                          if ($firstOffset -lt 0) { $firstOffset = $i }
+                      }
+                  }
+              }
+              if ($loneLf -gt 0) {
+                  $failed = $true
+                  Write-Host "::error file=$($file.FullName)::$($file.Name) contains $loneLf lone LF byte(s); first at offset $firstOffset. Use CRLF."
+              } else {
+                  Write-Host "OK: $($file.Name) uses CRLF."
+              }
+          }
+          if ($failed) { exit 1 }
+
+      - name: 校验安装器内置的 payload 哈希
+        shell: ${{ matrix.shell }}
+        run: |
+          # install.ps1 会按内置 SHA256 校验从网络下载的启动器脚本。
+          # 一旦 src/ 或 uninstall.ps1 改动而哈希没同步，安装器会在用户机器上失败。
+          $ErrorActionPreference = 'Stop'
+          . ./install.ps1
+          $mismatch = @()
+          foreach ($relative in @($script:PayloadSha256.Keys)) {
+              if (-not (Test-Path -LiteralPath $relative)) {
+                  $mismatch += "缺少文件：$relative"
+                  continue
+              }
+              $actual = (Get-FileHash -LiteralPath $relative -Algorithm SHA256).Hash.ToLowerInvariant()
+              $expected = [string]$script:PayloadSha256[$relative]
+              if ($actual -ne $expected.ToLowerInvariant()) {
+                  $mismatch += "$relative`n  期望 $expected`n  实际 $actual"
+              }
+          }
+          if ($mismatch.Count -gt 0) {
+              $mismatch | ForEach-Object { Write-Host "::error::payload 哈希不一致：$_" }
+              Write-Host '请更新 install.ps1 中的 $script:PayloadSha256。'
+              exit 1
+          }
+          Write-Host "payload 哈希一致（$($script:PayloadSha256.Count) 个文件）。"
+
+      - name: PSScriptAnalyzer 静态检查
+        shell: ${{ matrix.shell }}
+        run: |
+          # Error/Warning 级别；排除噪音规则，保留全部安全规则
+          # （PSAvoidUsingInvokeExpression、PSAvoidUsingPlainTextForPassword 等）。
+          $ErrorActionPreference = 'Stop'
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $analyzer = Get-Module -ListAvailable -Name PSScriptAnalyzer |
+              Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $analyzer) {
+              Write-Host 'Installing PSScriptAnalyzer...'
+              Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -Repository PSGallery -ErrorAction Stop
+          }
+          Import-Module PSScriptAnalyzer -Force
+          $excludeRules = @(
+              'PSAvoidUsingWriteHost',
+              'PSAvoidUsingPositionalParameters',
+              'PSUseShouldProcessForStateChangingFunctions',
+              'PSProvideCommentHelp',
+              'PSUseSingularNouns'
+          )
+          $paths = @()
+          foreach ($dir in @('scripts', 'src', 'tests')) {
+              if (Test-Path -LiteralPath $dir) {
+                  $paths += @(Get-ChildItem -LiteralPath $dir -Recurse -File -Filter '*.ps1' -ErrorAction SilentlyContinue |
+                      ForEach-Object { $_.FullName })
+              }
+          }
+          # 根目录的 install.ps1 / uninstall.ps1 同样纳入检查。
+          $paths += @(Get-ChildItem -LiteralPath '.' -File -Filter '*.ps1' -ErrorAction SilentlyContinue |
+              ForEach-Object { $_.FullName })
+          if ($paths.Count -eq 0) {
+              Write-Host 'No PowerShell files found; skipping PSScriptAnalyzer.'
+              exit 0
+          }
+          $results = @()
+          foreach ($path in $paths) {
+              $results += @(Invoke-ScriptAnalyzer -Path $path -Severity Error, Warning -ExcludeRules $excludeRules)
+          }
+          $report = if ($results.Count -gt 0) {
+              $results | Format-Table -AutoSize | Out-String -Width 4096
+          } else {
+              'PSScriptAnalyzer: no issues found.'
+          }
+          $report | Write-Host
+          $report | Out-File -FilePath 'analyzer-results.txt' -Encoding utf8
+          # Error 一律阻断；安全规则的 Warning 同样阻断（不能只存档）；
+          # 其余 Warning 存档到 artifact，避免纯风格问题劝退贡献者。
+          $securityRules = @(
+              'PSAvoidUsingInvokeExpression',
+              'PSAvoidUsingPlainTextForPassword',
+              'PSAvoidUsingConvertToSecureStringWithPlainText',
+              'PSAvoidUsingUsernameAndPasswordParams',
+              'PSUsePSCredentialType',
+              'PSAvoidUsingBrokenHashAlgorithms'
+          )
+          $blocking = @($results | Where-Object {
+              $_.Severity -eq 'Error' -or ($_.Severity -eq 'Warning' -and $securityRules -contains $_.RuleName)
+          })
+          if ($blocking.Count -gt 0) {
+              Write-Host "::error::PSScriptAnalyzer found $($blocking.Count) blocking issue(s) (Error or security Warning)."
+              exit 1
+          }
+
+      - name: 零依赖测试（run-install-tests.ps1）
+        shell: ${{ matrix.shell }}
+        run: |
+          # 不依赖 Pester 的纯 PowerShell 断言，任何 Windows 都能跑。
+          $ErrorActionPreference = 'Stop'
+          $runner = 'tests\run-install-tests.ps1'
+          if (-not (Test-Path -LiteralPath $runner)) {
+              Write-Host '未找到 tests\run-install-tests.ps1，跳过。'
+              exit 0
+          }
+          & $runner
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "::error::零依赖测试失败（退出码 $LASTEXITCODE）。"
+              exit 1
+          }
+
+      - name: Pester 测试
+        shell: ${{ matrix.shell }}
+        run: |
+          # 仅当 tests/ 下存在 *.Tests.ps1 时运行；结果输出 NUnitXml 供 artifact 上传。
+          $ErrorActionPreference = 'Stop'
+          $testFiles = @(Get-ChildItem -Path 'tests' -Recurse -File -Filter '*.Tests.ps1' -ErrorAction SilentlyContinue)
+          if ($testFiles.Count -eq 0) {
+              Write-Host 'No *.Tests.ps1 found under tests/; skipping Pester.'
+              exit 0
+          }
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $pester = Get-Module -ListAvailable -Name Pester | Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $pester -or $pester.Version -lt [version]'5.0.0') {
+              try {
+                  Write-Host 'Installing Pester >= 5.0...'
+                  Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser -Repository PSGallery -SkipPublisherCheck -ErrorAction Stop
+              } catch {
+                  Write-Host "::warning::Pester 5 安装失败，跳过 Pester 测试（零依赖测试已覆盖核心用例）：$($_.Exception.Message)"
+                  exit 0
+              }
+          }
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.TestResult.OutputPath = 'test-results.xml'
+          $result = Invoke-Pester -Configuration $config
+          if ($result.FailedCount -gt 0) {
+              Write-Host "::error::$($result.FailedCount) Pester test(s) failed."
+              exit 1
+          }
+          Write-Host "Pester passed: $($result.PassedCount) passed, $($result.SkippedCount) skipped."
+
+      - name: 敏感信息扫描
+        shell: ${{ matrix.shell }}
+        run: |
+          # 扫描仓库文本文件，命中内网 IP、设备序列号、本机用户路径即失败。
+          # 排除 .git/ 与 .github/（本文件自身包含这些正则，避免自命中）。
+          $ErrorActionPreference = 'Stop'
+          # 只用通用规则，禁止在 CI 里硬编码任何真实序列号/用户名（否则 CI 文件本身就是泄露源）。
+          $patterns = @(
+              @{ Name = 'private IPv4 address'; Regex = '\b(?:192\.168|10|172\.(?:1[6-9]|2[0-9]|3[01]))\.\d{1,3}\.\d{1,3}\b' },
+              # 序列号：15-17 位大写字母/数字，且至少含一个数字和一个字母，避免误报 LICENSE 中的英文单词
+              @{ Name = 'device serial number'; Regex = '\b(?=[A-Z0-9]{15,17}\b)(?=[A-Z0-9]*\d)(?=[A-Z0-9]*[A-Z])[A-Z0-9]{15,17}\b' },
+              @{ Name = 'local user path'; Regex = 'C:\\Users\\(?!<|%|Public\b|Default\b|\.\.\.)[A-Za-z0-9._-]+' }
+          )
+          # 文档中允许出现的脱敏示例值，匹配前先剔除。
+          $allowList = @('192.168.1.100', '192.168.1.10', 'ABCDEF0123456789', 'ABCDEF0123456788')
+          $textExtensions = @('.md', '.txt', '.ps1', '.psm1', '.psd1', '.bat', '.cmd', '.yml', '.yaml', '.json', '.xml', '.gitignore', '.gitattributes', '.csv', '.log')
+          $root = (Get-Location).Path
+          $files = @(Get-ChildItem -Path $root -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
+              $_.FullName -notmatch '\\\.git\\' -and
+              $_.FullName -notmatch '\\\.github\\' -and
+              $_.Length -lt 2MB -and
+              ($textExtensions -contains $_.Extension.ToLower() -or $_.Name -in @('LICENSE', '.gitignore', '.gitattributes'))
+          })
+          $hits = @()
+          foreach ($file in $files) {
+              $lineNo = 0
+              foreach ($line in [System.IO.File]::ReadAllLines($file.FullName)) {
+                  $lineNo++
+                  $scrubbed = $line
+                  foreach ($allowed in $allowList) {
+                      $scrubbed = $scrubbed.Replace($allowed, '')
+                  }
+                  foreach ($pattern in $patterns) {
+                      # -cmatch：大小写敏感，避免把 64 位小写哈希误判成序列号。
+                      if ($scrubbed -cmatch $pattern.Regex) {
+                          $hits += [pscustomobject]@{
+                              File = $file.FullName.Substring($root.Length + 1)
+                              Line = $lineNo
+                              Rule = $pattern.Name
+                          }
+                      }
+                  }
+              }
+          }
+          if ($hits.Count -gt 0) {
+              $hits | Format-Table -AutoSize | Out-String -Width 4096 | Write-Host
+              foreach ($hit in $hits) {
+                  Write-Host "::error file=$($hit.File),line=$($hit.Line)::Sensitive data detected ($($hit.Rule)). Remove it before merging."
+              }
+              exit 1
+          }
+          Write-Host "Sensitive-data scan passed ($($files.Count) files checked)."
+
+      - name: 检查 src/ 下无二进制文件
+        shell: ${{ matrix.shell }}
+        run: |
+          # 防止误提交 scrcpy.exe、adb.exe、依赖 DLL 或压缩包。
+          $ErrorActionPreference = 'Stop'
+          $binaryExtensions = @('.exe', '.dll', '.sys', '.zip', '.7z', '.rar', '.jar', '.apk', '.so', '.dylib', '.bin', '.msi', '.cab')
+          $srcDir = Join-Path (Get-Location).Path 'src'
+          if (-not (Test-Path -LiteralPath $srcDir)) {
+              Write-Host 'src/ not found; skipping binary check.'
+              exit 0
+          }
+          $offenders = New-Object System.Collections.Generic.List[string]
+          foreach ($file in @(Get-ChildItem -LiteralPath $srcDir -Recurse -File -Force)) {
+              $ext = $file.Extension.ToLowerInvariant()
+              if ($binaryExtensions -contains $ext) {
+                  if (-not $offenders.Contains($file.FullName)) { $offenders.Add($file.FullName) }
+                  continue
+              }
+              if ($file.Length -ge 2) {
+                  $stream = [System.IO.File]::OpenRead($file.FullName)
+                  try {
+                      $b1 = $stream.ReadByte()
+                      $b2 = $stream.ReadByte()
+                  } finally {
+                      $stream.Close()
+                  }
+                  if ($b1 -eq 0x4D -and $b2 -eq 0x5A) {
+                      if (-not $offenders.Contains($file.FullName)) { $offenders.Add($file.FullName) }
+                  }
+              }
+          }
+          if ($offenders.Count -gt 0) {
+              foreach ($path in $offenders) {
+                  Write-Host "::error file=$path::Binary file detected under src/. Do not commit scrcpy/adb binaries."
+              }
+              exit 1
+          }
+          Write-Host 'Binary check passed: no executable or archive under src/.'
+
+      - name: 上传测试与静态检查结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-results-${{ matrix.shell }}
+          path: |
+            test-results.xml
+            analyzer-results.txt
+          if-no-files-found: warn
+          retention-days: 14

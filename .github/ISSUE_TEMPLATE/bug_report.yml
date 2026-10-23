@@ -1,0 +1,99 @@
+name: Bug 反馈
+description: 报告启动器、WiFi 自动发现或连接过程中的问题
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请尽量提供完整信息，尤其是 `adb devices` 和启动器的完整输出，
+        这能大幅缩短定位问题的时间。
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 issue，确认没有重复
+          required: true
+        - label: 我已阅读 README 的常见问题部分
+          required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows 版本
+      description: 例如 Windows 11 23H2 (22631.4169)，可在 winver 中查看
+      placeholder: Windows 11 23H2 (22631.4169)
+    validations:
+      required: true
+
+  - type: input
+    id: scrcpy-version
+    attributes:
+      label: scrcpy 版本
+      description: 启动器使用的 scrcpy 版本，例如 5.0.1
+      placeholder: 5.0.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection
+    attributes:
+      label: 连接方式
+      description: 出问题时使用的是哪种连接方式
+      options:
+        - USB
+        - WiFi
+        - USB 和 WiFi 都试过
+    validations:
+      required: true
+
+  - type: textarea
+    id: adb-devices
+    attributes:
+      label: adb devices 输出
+      description: 在 cmd 中运行 `adb devices`，粘贴完整输出（包括表头和空行）
+      render: shell
+      placeholder: |
+        List of devices attached
+        XXXXXXXXXXXXXXXX        device
+    validations:
+      required: true
+
+  - type: textarea
+    id: launcher-output
+    attributes:
+      label: 启动器完整输出
+      description: 双击启动器后窗口中的全部文字，或从 cmd 运行启动器得到的完整输出
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 按顺序描述怎样触发这个问题
+      placeholder: |
+        1. 打开 ...
+        2. 点击 ...
+        3. 出现 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 你原本期望发生什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 截图、日志文件、是否有安全软件拦截等
+    validations:
+      required: false

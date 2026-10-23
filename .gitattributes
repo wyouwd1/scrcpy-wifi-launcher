@@ -1,0 +1,11 @@
+# BAT 必须保持 ASCII + CRLF，PS1 必须保持 UTF-8 BOM + CRLF。
+# 用 -text 关闭换行转换，保证 GitHub raw 下载的内容与仓库文件逐字节一致
+# （install.ps1 会按 SHA256 校验下载到的启动器脚本）。
+*.bat -text
+*.cmd -text
+*.ps1 -text
+# 文档统一 LF，便于 diff。
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf

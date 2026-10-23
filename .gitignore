@@ -1,0 +1,15 @@
+# 日志与备份
+*.log
+*.bak*
+
+# 系统与编辑器杂项
+Thumbs.db
+.DS_Store
+.vscode/
+
+# scrcpy 官方二进制（不入库，从官方 release 下载）
+scrcpy-win64-*/
+*.zip
+
+# 临时目录
+temp/

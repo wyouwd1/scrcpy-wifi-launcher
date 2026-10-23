@@ -1,0 +1,40 @@
+# 长期无活动 issue 自动标记与关闭
+# 触发：每天 UTC 01:30（北京时间 09:30）定时运行，也可手动 dispatch
+# 规则：issue 30 天无活动标记 stale，再 30 天（共 60 天）无活动关闭；PR 不处理
+name: Stale
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  stale:
+    name: 标记并关闭长期无活动的 issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 运行 actions/stale
+        uses: actions/stale@v9
+        with:
+          days-before-issue-stale: 30
+          days-before-issue-close: 60
+          # 负数表示禁用 PR 的 stale 处理
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          stale-issue-label: 'stale'
+          stale-issue-message: |
+            这个 issue 已经 30 天没有活动了。如果问题仍然存在，请回复补充信息；
+            否则它将在 30 天后自动关闭。
+          close-issue-message: |
+            由于长期没有活动，这个 issue 已自动关闭。如果问题仍然存在，
+            欢迎重新打开或提交新的 issue。
+          # 带这些标签的 issue 永不自动关闭
+          exempt-issue-labels: 'pinned,security'
+          remove-stale-when-updated: true
+          operations-per-run: 50
