@@ -25,7 +25,7 @@ set "SERIAL="
 set "SERNAME="
 set "WIFI_ENDPOINT="
 set "WIFI_SOURCE="
-set "WIFI_RC=0"
+set "WIFI_RC=0"
 set "WIFI_LAST_ERR="
 set "WIFI_PORT=5555"
 if defined SCRCPY_WIFI_PORT set "WIFI_PORT=%SCRCPY_WIFI_PORT%"
@@ -43,9 +43,16 @@ if /i "%SCRCPY_NO_PAUSE%"=="1" set "DO_PAUSE=0"
 rem --no-wifi is a launcher switch; SCRCPY_NO_WIFI=1 has the same effect.
 if not "!CHECK: --no-wifi =!"=="!CHECK!" (
     set "DO_WIFI=0"
+    set "SCRCPY_CONN=usb"
     set "ARGS=!ARGS:--no-wifi=!"
 )
-if /i "%SCRCPY_NO_WIFI%"=="1" set "DO_WIFI=0"
+if /i "%SCRCPY_NO_WIFI%"=="1" set "SCRCPY_CONN=usb"
+
+rem --wifi forces WiFi discovery without showing the menu.
+if not "!CHECK: --wifi =!"=="!CHECK!" (
+    set "SCRCPY_CONN=wifi"
+    set "ARGS=!ARGS:--wifi=!"
+)
 
 rem Fast path: help/version do not need a device.
 set "WANT_HELP=0"
@@ -65,8 +72,23 @@ if errorlevel 1 goto :err_adb_server
 rem Explicit SCRCPY_SERIAL wins and must be validated. No fallback.
 if defined SCRCPY_SERIAL goto :explicit_serial
 
-rem Try WiFi first; USB selection is the fallback when WiFi is unavailable.
-if "%DO_WIFI%"=="0" goto :usb_select
+rem Let the user pick the transport. Default is USB because Wi-Fi can lag.
+rem Non-interactive runs (--no-pause) skip the prompt and use USB unless
+rem SCRCPY_CONN or --wifi says otherwise.
+if not defined SCRCPY_CONN (
+    if "%DO_PAUSE%"=="1" (
+        call :choose_connection
+    ) else (
+        set "SCRCPY_CONN=usb"
+    )
+)
+if /i "%SCRCPY_CONN%"=="usb" goto :usb_select
+if /i "%SCRCPY_CONN%"=="wifi" goto :wifi_first
+echo [ERROR] invalid SCRCPY_CONN="%SCRCPY_CONN%" ^(expected wifi or usb^)
+set "RC=1"
+goto :finish_error
+
+:wifi_first
 call :try_wifi
 if defined WIFI_ENDPOINT (
     set "SERIAL=%WIFI_ENDPOINT%"
@@ -100,6 +122,28 @@ if not defined SERIAL (
 )
 if not defined SERIAL goto :err_no_device
 goto :select_done
+
+rem ------------------------------------------------------------
+rem Connection picker. 1=WiFi, 2=USB (default), Q=quit.
+rem ------------------------------------------------------------
+:choose_connection
+echo.
+echo ===============================
+echo   Select connection
+echo ===============================
+echo   1. WiFi  - auto discover ^(may lag^)
+echo   2. USB   - cable, smoother  [default]
+echo   Q. Quit
+echo.
+choice /c 12q /n /t 15 /d 2 /m "Choice [1/2/Q], default 2 in 15s: "
+if "%ERRORLEVEL%"=="3" goto :cancelled
+if "%ERRORLEVEL%"=="1" (
+    set "SCRCPY_CONN=wifi"
+    exit /b 0
+)
+rem 2 = USB; any choice failure (no console attached) also falls back to USB.
+set "SCRCPY_CONN=usb"
+exit /b 0
 
 rem ------------------------------------------------------------
 rem WiFi discovery helper. Sets WIFI_ENDPOINT/WIFI_SOURCE on success.
@@ -184,6 +228,10 @@ exit /b %RC%
 set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" echo [ERROR] scrcpy exited with code %RC%
 exit /b %RC%
+
+:cancelled
+echo [INFO] cancelled by user
+exit /b 0
 
 :err_scrcpy_missing
 echo [ERROR] scrcpy.exe not found: "%SCRCPY%"

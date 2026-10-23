@@ -100,7 +100,28 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 ## 使用
 
-双击 `启动scrcpy.bat` 或桌面快捷方式。启动器会打印选中的设备和发现路径：
+双击 `启动scrcpy.bat` 或桌面快捷方式，先选连接方式：
+
+```text
+===============================
+  Select connection
+===============================
+  1. WiFi  - auto discover (may lag)
+  2. USB   - cable, smoother  [default]
+  Q. Quit
+
+Choice [1/2/Q], default 2 in 15s:
+```
+
+| 按键 | 行为 |
+| --- | --- |
+| `1` | 走 WiFi 自动发现（5 级优先级，见下） |
+| `2` 或 15 秒不操作 | 直接走 USB |
+| `Q` | 退出 |
+
+**WiFi 比 USB 延迟高、更容易卡**，这是无线传输的物理限制。要稳定低延迟就选 USB；WiFi 只适合不方便插线的场景。
+
+选完会打印选中的设备和发现路径：
 
 ```text
 [INFO] selected WiFi endpoint: 192.168.1.100:37123   source: mdns-tls-connect
@@ -123,11 +144,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 rem 透传 scrcpy 参数
 启动scrcpy.bat --max-size=1024 --max-fps=60
 
-rem 只用 USB，跳过 WiFi 发现
+rem 直接走 USB，不显示选择菜单
 启动scrcpy.bat --no-wifi
 
-rem 自动化调用：出错不等待按键
+rem 直接走 WiFi，不显示选择菜单
+启动scrcpy.bat --wifi
+
+rem 自动化调用：不显示菜单、默认 USB、出错不等待按键
 启动scrcpy.bat --no-pause
+
+rem 自动化且要 WiFi
+启动scrcpy.bat --wifi --no-pause
 
 rem 只看 scrcpy 帮助，不触发设备发现
 启动scrcpy.bat --help
@@ -182,7 +209,8 @@ rem 只看 scrcpy 帮助，不触发设备发现
 | `SCRCPY_WIDTH` | `580` | scrcpy 窗口宽度（像素） |
 | `SCRCPY_HEIGHT` | `1264` | scrcpy 窗口高度（像素） |
 | `SCRCPY_WIFI_PORT` | `5555` | USB 辅助与局域网扫描使用的 adb 端口；Android 11+ 无线调试端口由 mDNS 决定，不受此变量影响 |
-| `SCRCPY_NO_WIFI` | 空 | 设为 `1` 跳过 WiFi 发现，只用 USB（等同 `--no-wifi`） |
+| `SCRCPY_CONN` | 空 | `wifi` 或 `usb`，直接指定连接方式并跳过选择菜单。非法值会报错退出 |
+| `SCRCPY_NO_WIFI` | 空 | 设为 `1` 跳过 WiFi 发现，只用 USB（等同 `--no-wifi` / `SCRCPY_CONN=usb`） |
 | `SCRCPY_NO_LAN_SCAN` | 空 | 设为 `1` 关闭最后一级「局域网 /24 端口扫描」。公司网络、EDR 告警或不想让本机发起扫描时使用 |
 | `SCRCPY_NO_PAUSE` | 空 | 设为 `1` 出错不暂停（等同 `--no-pause`） |
 

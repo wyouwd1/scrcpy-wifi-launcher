@@ -8,7 +8,9 @@
 
 ### 新增
 
-- Windows 一键启动器 `启动scrcpy.bat`：自动选择设备、自动注入窗口尺寸、错误时暂停。
+- Windows 一键启动器 `启动scrcpy.bat`：启动时用菜单选择 WiFi / USB，自动选择设备、自动注入窗口尺寸、错误时暂停。
+- WiFi 与 USB 的选择：`1` = WiFi，`2` 或 15 秒不操作 = USB（默认），`Q` = 退出。
+- 非交互模式（`--no-pause`）默认 USB，不弹菜单；可用 `--wifi` 或 `SCRCPY_CONN=wifi` 覆盖。
 - WiFi 自动发现 `wifi-discover.ps1`，五级优先级：
   1. 复用 `adb devices` 中已在线 TCP/IP 设备
   2. `adb mdns services` 的 `_adb-tls-connect._tcp`（Android 11+ 无线调试）
