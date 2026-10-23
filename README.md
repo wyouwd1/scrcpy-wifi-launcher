@@ -75,6 +75,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubus
 
 也可以设环境变量 `SCRCPY_MIRROR`。镜像属于**你自己选择的信任对象**，本仓库不为其可用性或安全性背书；不想用镜像就走上面的手动安装。
 
+### 启动器脚本的下载源
+
+安装器需要下载 `start-scrcpy.bat`、`wifi-discover.ps1`、`uninstall.ps1` 三个脚本，会依次尝试：
+
+1. `raw.githubusercontent.com`（GitHub 官方）
+2. `cdn.jsdelivr.net`（jsDelivr CDN，国内一般可直连）
+
+两个来源下载后都会做 SHA256 校验，哈希写死在 `install.ps1` 里，任何篡改都会被拒绝安装。所以即使 CDN 被劫持也无法注入代码。
+
 ### 手动安装
 
 1. 下载官方包：<https://github.com/Genymobile/scrcpy/releases/download/v5.0.1/scrcpy-win64-v5.0.1.zip>

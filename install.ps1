@@ -544,6 +544,21 @@ function Move-DirectoryContent {
     }
 }
 
+function Get-PayloadUrls {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [string]$Branch = 'main'
+    )
+
+    # GitHub raw 优先；失败后回退 jsDelivr（国内一般可直连）。
+    # 两者都只是传输通道，真正的信任锚是 PayloadSha256。
+    return @(
+        ('https://raw.githubusercontent.com/{0}/{1}/{2}/{3}' -f $script:RepoOwner, $script:RepoName, $Branch, $RelativePath),
+        ('https://cdn.jsdelivr.net/gh/{0}/{1}@{2}/{3}' -f $script:RepoOwner, $script:RepoName, $Branch, $RelativePath)
+    )
+}
+
 function Get-LauncherPayload {
     [CmdletBinding()]
     param(
@@ -577,9 +592,25 @@ function Get-LauncherPayload {
             }
             Copy-Item -LiteralPath $sourcePath -Destination $destination -Force -ErrorAction Stop
         } else {
-            $url = '{0}/{1}/{2}' -f $script:RawBase, $Branch, $item.RelativePath
-            Write-InstallLog "下载启动器文件：$url"
-            Invoke-DownloadFile -Uri $url -Destination $destination -TimeoutSec 60 -MaxAttempts 3 -Activity "下载 $($item.TargetName)"
+            # 依次尝试 GitHub raw 与 jsDelivr CDN（国内网络通常可直连 CDN）。
+            # 无论走哪个源，最终都必须通过下面的 SHA256 校验。
+            $urls = @(Get-PayloadUrls -RelativePath $item.RelativePath -Branch $Branch)
+            $downloaded = $false
+            $lastError = ''
+            foreach ($url in $urls) {
+                try {
+                    Write-InstallLog "下载启动器文件：$url"
+                    Invoke-DownloadFile -Uri $url -Destination $destination -TimeoutSec 60 -MaxAttempts 2 -Activity "下载 $($item.TargetName)"
+                    $downloaded = $true
+                    break
+                } catch {
+                    $lastError = $_.Exception.Message
+                    Write-InstallLog "该源下载失败，尝试下一个：$lastError" -Level WARN
+                }
+            }
+            if (-not $downloaded) {
+                throw "无法下载启动器文件：$($item.RelativePath)`n$lastError`n可改用 -LocalSource <仓库路径> 从本地安装。"
+            }
 
             # 网络下载的 payload 必须匹配内置哈希，避免 main 分支被改动后安装未审阅脚本。
             $expectedPayloadHash = $script:PayloadSha256[$item.RelativePath]
