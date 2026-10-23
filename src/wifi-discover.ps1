@@ -1,30 +1,30 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-  Discover a usable scrcpy WiFi endpoint through adb.
+  通过 adb 发现可用的 scrcpy WiFi 端点。
 
 .DESCRIPTION
-  Discovery order:
-    1. Reuse an online TCP/IP device already listed by "adb devices".
-    2. Connect to endpoints advertised by "adb mdns services"
-       (_adb-tls-connect._tcp first, then _adb._tcp).
-    3. If a USB device is present, read its WiFi IP and enable adb tcpip.
-    4. Scan the local /24 subnet(s) for an open adb port.
+  发现顺序：
+    1. 复用 "adb devices" 中已在线的 TCP/IP 设备。
+    2. 连接 "adb mdns services" 广播的端点
+       （优先 _adb-tls-connect._tcp，其次 _adb._tcp）。
+    3. 若有 USB 设备，读取其 WiFi IP 并启用 adb tcpip。
+    4. 扫描本机 /24 网段，寻找开放的 adb 端口。
 
-  On success the script writes exactly two lines to stdout:
+  成功时脚本向 stdout 只写两行：
     WIFI_ENDPOINT=host:port
     WIFI_SOURCE=<source>
-  and exits 0. On failure it writes a short message to stderr and exits 1.
+  然后退出码 0。失败时向 stderr 写一条简短消息并退出码 1。
 
 .PARAMETER AdbPath
-  Path to adb.exe. Defaults to adb.exe on PATH.
+  adb.exe 路径。默认使用 PATH 中的 adb.exe。
 
 .PARAMETER Port
-  WiFi adb port used by USB assist and LAN scanning. When omitted, the
-  SCRCPY_WIFI_PORT environment variable is used, then 5555.
+  USB 辅助与局域网扫描使用的 WiFi adb 端口。省略时依次使用
+  SCRCPY_WIFI_PORT 环境变量，最后回退 5555。
 
 .PARAMETER TimeoutSec
-  Timeout for a single adb command, in seconds. Default 8.
+  单条 adb 命令的超时秒数。默认 8。
 #>
 [CmdletBinding()]
 param(
@@ -92,7 +92,7 @@ function Invoke-Adb {
     }
     $remaining = Get-RemainingMs
     if ($remaining -le 0) {
-        return [pscustomobject]@{ ExitCode = -1; StdOut = ''; StdErr = 'total deadline exceeded'; TimedOut = $true }
+        return [pscustomobject]@{ ExitCode = -1; StdOut = ''; StdErr = '总超时时间已用尽'; TimedOut = $true }
     }
     if ($TimeoutMs -gt $remaining) {
         $TimeoutMs = $remaining
@@ -115,7 +115,7 @@ function Invoke-Adb {
     try {
         $started = $process.Start()
         if (-not $started) {
-            return [pscustomobject]@{ ExitCode = -1; StdOut = ''; StdErr = 'failed to start adb'; TimedOut = $false }
+            return [pscustomobject]@{ ExitCode = -1; StdOut = ''; StdErr = 'adb 启动失败'; TimedOut = $false }
         }
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
@@ -129,7 +129,7 @@ function Invoke-Adb {
                 [void]$process.WaitForExit(1000)
             } catch {
             }
-            return [pscustomobject]@{ ExitCode = -1; StdOut = ''; StdErr = 'adb command timed out'; TimedOut = $true }
+            return [pscustomobject]@{ ExitCode = -1; StdOut = ''; StdErr = 'adb 命令超时'; TimedOut = $true }
         }
         $stdout = ''
         $stderr = ''
@@ -333,7 +333,7 @@ function Get-LocalSubnets {
     $subnets = New-Object System.Collections.ArrayList
     $seen = @{}
 
-    # Prefer the .NET API: it is fast and avoids loading the NetTCPIP module.
+    # 优先用 .NET API：速度快，且不用加载 NetTCPIP 模块。
     try {
         $nics = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
         foreach ($nic in $nics) {
@@ -367,7 +367,7 @@ function Get-LocalSubnets {
     } catch {
     }
 
-    # Fallback for environments where the .NET enumeration is incomplete.
+    # 回退方案：.NET 枚举不完整时使用。
     if ($subnets.Count -eq 0 -and $null -ne (Get-Command Get-NetIPAddress -ErrorAction SilentlyContinue)) {
         try {
             $addresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop)
@@ -555,11 +555,11 @@ function Try-UsbAssist {
     return $null
 }
 
-# --- main ---------------------------------------------------------------
+# --- 主流程 -------------------------------------------------------------
 
 $resolvedAdb = Resolve-AdbPath -Path $AdbPath
 if ($null -eq $resolvedAdb) {
-    Write-Stderr ('adb not found: ' + $AdbPath)
+    Write-Stderr ('未找到 adb：' + $AdbPath)
     exit 1
 }
 $script:AdbExePath = $resolvedAdb
@@ -582,14 +582,14 @@ if ($PSBoundParameters.ContainsKey('Port') -and $Port -gt 0) {
     }
 }
 if ($effectivePort -lt 1 -or $effectivePort -gt 65535) {
-    Write-Stderr ('invalid WiFi port: ' + $effectivePort)
+    Write-Stderr ('WiFi 端口无效：' + $effectivePort)
     exit 1
 }
 
 $null = Invoke-Adb -Arguments @('start-server') -TimeoutMs 5000
 $devices = @(Get-AdbDevices)
 
-# 1) Reuse an already-online TCP/IP transport.
+# 1）复用已在线的 TCP/IP 连接。
 foreach ($device in @($devices | Where-Object { $_.State -eq 'device' -and $_.Serial -match ':' })) {
     if ((Get-RemainingMs) -lt 400) {
         break
@@ -601,7 +601,7 @@ foreach ($device in @($devices | Where-Object { $_.State -eq 'device' -and $_.Se
     }
 }
 
-# 2) Ask adb mDNS; TLS connect endpoints first, then classic _adb._tcp.
+# 2）查询 adb mDNS：先 TLS 连接端点，再经典 _adb._tcp。
 $mdnsCandidates = @(Get-MdnsCandidates)
 foreach ($candidate in $mdnsCandidates) {
     if ((Get-RemainingMs) -lt 600) {
@@ -618,7 +618,7 @@ foreach ($candidate in $mdnsCandidates) {
     }
 }
 
-# 3) USB assist. Only reached when no TCP/mDNS endpoint has validated yet.
+# 3）USB 辅助。仅在 TCP/mDNS 都未验证成功时执行。
 $usbResult = Try-UsbAssist -Devices $devices -PortNumber $effectivePort
 if ($null -ne $usbResult) {
     Write-Output ('WIFI_ENDPOINT=' + $usbResult.Endpoint)
@@ -626,12 +626,12 @@ if ($null -ne $usbResult) {
     exit 0
 }
 
-# 4) LAN scan of active physical /24 subnets, capped at 3 seconds total.
+# 4）扫描活动物理网卡的 /24 网段，总耗时上限 3 秒。
 #    企业网络/EDR 环境建议设 SCRCPY_NO_LAN_SCAN=1 关闭；只有老式 adb tcpip 5555 设备才需要这一级。
 if ($env:SCRCPY_NO_LAN_SCAN -eq '1') {
-    Write-Stderr 'LAN scan skipped (SCRCPY_NO_LAN_SCAN=1)'
+    Write-Stderr '已跳过局域网扫描（SCRCPY_NO_LAN_SCAN=1）'
 } else {
-    # 4) LAN scan of active physical /24 subnets, capped at 3 seconds total.
+    # 4）扫描活动物理网卡的 /24 网段，总耗时上限 3 秒。
     $scanClock = [System.Diagnostics.Stopwatch]::StartNew()
     $subnets = @(Get-LocalSubnets)
     $remainingScan = $script:ScanBudgetMs - [int]$scanClock.ElapsedMilliseconds
@@ -661,5 +661,5 @@ if ($env:SCRCPY_NO_LAN_SCAN -eq '1') {
     }
 }
 
-Write-Stderr 'no WiFi endpoint found via existing TCP, mDNS, USB assist, or LAN scan'
+Write-Stderr '未找到可用的 WiFi 端点：已尝试现有 TCP、mDNS、USB 辅助与局域网扫描'
 exit 1

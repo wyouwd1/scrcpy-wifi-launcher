@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 启动器界面与 `wifi-discover.ps1` 的注释、报错全部改为中文；BAT 改用 GBK 编码（代码页 936），CRLF 换行不变。
+- CI 的 BAT 门禁由“ASCII-only”改为“无 BOM 的 GBK 合法字节序列”，同步更新 `install.ps1` 内置的 payload SHA256。
+
 ## [1.0.0] - 2026-10-23
 
 ### 新增

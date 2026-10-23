@@ -33,12 +33,12 @@ docs: 补充路由器 AP 隔离的排查步骤
 
 ### BAT（`src/start-scrcpy.bat`）
 
-- **ASCII-only**：注释和输出全部用英文，不能出现中文、全角符号、特殊 Unicode。中文 Windows 的 cmd 代码页会让 UTF-8 字节被错误解析，轻则乱码重则语法错误。
+- **GBK 编码**：文件必须保存为无 BOM 的 GBK（代码页 936），中文才能被 cmd.exe 正确解析。禁止 UTF-8（含 BOM）——cmd 按字节读取批处理，UTF-8 中文会导致语句错位。GBK 无法表示的字符（emoji、部分生僻字）不要使用。
 - **CRLF 换行**：仓库用 `.gitattributes` 强制 `*.bat text eol=crlf`，本地编辑后不要转成 LF。
 - 固定开头：`@echo off` + `setlocal EnableExtensions EnableDelayedExpansion`。
 - 变量名全大写，用 `set "NAME=value"` 形式；引用时加引号。
 - 注释用 `rem`，不用 `::`（在括号块里会出问题）。
-- 输出统一前缀：`[INFO]` / `[WARN]` / `[ERROR]`。
+- 输出统一前缀：`[信息]` / `[警告]` / `[错误]`。
 - BAT 不做破坏性操作；安装/卸载脚本需要删除或覆盖时，先备份并提供 `-Force` 之类的显式开关。
 
 ### PowerShell（`src/wifi-discover.ps1`）
@@ -49,7 +49,7 @@ docs: 补充路由器 AP 隔离的排查步骤
   - `Get-Content -Raw` 可以，`ConvertFrom-Json -AsHashtable` 不行
 - 文件头保留 `#requires -Version 5.1`。
 - 函数用 `Verb-Noun` 命名；变量用英文，注释可用中文。
-- 对外输出保持 ASCII 英文（会被 BAT 捕获），错误写 stderr，成功写 stdout。
+- 对外输出用中文（会被 BAT 捕获）；协议行 `WIFI_ENDPOINT=` / `WIFI_SOURCE=` 必须保持 ASCII 且格式不变。错误写 stderr，成功写 stdout。
 - 任何外部命令都要有超时，不要裸调 `adb` 后无限等待。
 - 新增网络操作前先检查剩余时间预算，遵守现有的 13 秒总预算。
 

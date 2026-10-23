@@ -104,8 +104,8 @@ $script:KnownSha256 = @{
 # 防止 main 分支被改动后，安装器把未经审阅的脚本放到用户机器上。
 # 修改 src/ 或 uninstall.ps1 后必须同步更新这里（CI 会检查一致性）。
 $script:PayloadSha256 = @{
-    'src/start-scrcpy.bat'  = '85cd95e32f6522c5b816cae4f4202cff5d2c9e0c1c7300081550e70ef559d79f'
-    'src/wifi-discover.ps1' = 'eba79697ff821c147bf8a4136c3b54486076f1edcd385466a2ad39293985ec96'
+    'src/start-scrcpy.bat'  = 'bed05932d9240368eaa9772094cf6e2c5f0b022c42cee05bf65c8b9074a80baf'
+    'src/wifi-discover.ps1' = '8d9035493b2bad90627ff3f2d8bc2114e219d79d9ef372dcbf817e329d5edc46'
     'uninstall.ps1'         = '0f6664b3db028259e9d4f6664993b2211411ea7d4d161dff3b73bd2d50cd5945'
 }
 

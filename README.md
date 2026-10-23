@@ -121,13 +121,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://cdn.jsdelivr
 
 ```text
 ===============================
-  Select connection
+  选择连接方式
 ===============================
-  1. WiFi  - auto discover (may lag)
-  2. USB   - cable, smoother  [default]
-  Q. Quit
+  1. WiFi  - 自动发现（可能较慢）
+  2. USB   - 数据线，更流畅  [默认]
+  Q. 退出
 
-Choice [1/2/Q], default 2 in 15s:
+请选择 [1/2/Q]，15 秒内不操作默认 2：
 ```
 
 | 按键 | 行为 |
@@ -141,8 +141,8 @@ Choice [1/2/Q], default 2 in 15s:
 选完会打印选中的设备和发现路径：
 
 ```text
-[INFO] selected WiFi endpoint: 192.168.1.100:37123   source: mdns-tls-connect
-[INFO] Alt+o screen off, Alt+Shift+o screen on, Alt+p power
+[信息] 已选 WiFi 端点：192.168.1.100:37123   来源：mdns-tls-connect
+[信息] 快捷键：Alt+o 熄屏，Alt+Shift+o 亮屏，Alt+p 电源键
 ```
 
 `source` 的含义：
@@ -318,7 +318,7 @@ cd /d "<安装目录>"
 启动scrcpy.bat
 ```
 
-带 `[ERROR]` 的那行就是原因。
+带 `[错误]` 的那行就是原因。
 
 **8. `adb` 版本冲突，连到了别的 adb server**
 
@@ -402,7 +402,7 @@ scrcpy-wifi-launcher/
 ├─ uninstall.ps1              # 卸载
 ├─ .gitattributes             # 强制 BAT/PS1 使用 CRLF
 ├─ src/
-│  ├─ start-scrcpy.bat        # 入口（ASCII + CRLF），安装后改名 启动scrcpy.bat
+│  ├─ start-scrcpy.bat        # 入口（GBK + CRLF），安装后改名 启动scrcpy.bat
 │  └─ wifi-discover.ps1       # 5 级 WiFi 发现
 ├─ docs/
 │  ├─ faq.md                  # 常见问题

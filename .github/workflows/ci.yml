@@ -29,31 +29,42 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 校验 src/*.bat 为 ASCII-only
+      - name: 校验 src/*.bat 为 GBK 编码
         shell: pwsh
         run: |
-          # 启动 BAT 必须全部是 ASCII 字节，避免 cmd.exe 代码页导致中文乱码。
-          # 逐个字节检查，任何 byte > 127 即失败。
+          # 启动 BAT 面向中文 Windows：cmd 默认代码页 936（GBK），中文可直接显示。
+          # 必须拒绝 UTF-8 BOM 和无法用 GBK 解码的字节：UTF-8 中文会让 cmd 解析错位。
           $ErrorActionPreference = 'Stop'
           $files = @(Get-ChildItem -Path 'src' -Filter '*.bat' -File -ErrorAction SilentlyContinue)
           if ($files.Count -eq 0) {
               Write-Host '::error::No .bat file found under src/.'
               exit 1
           }
+          $gbk = [System.Text.Encoding]::GetEncoding(
+              936,
+              [System.Text.EncoderFallback]::ExceptionFallback,
+              [System.Text.DecoderFallback]::ExceptionFallback)
           $failed = $false
           foreach ($file in $files) {
               $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
-              $badOffsets = New-Object System.Collections.Generic.List[int]
-              for ($i = 0; $i -lt $bytes.Length; $i++) {
-                  if ($bytes[$i] -gt 127) { $badOffsets.Add($i) }
-              }
-              if ($badOffsets.Count -gt 0) {
+              if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
                   $failed = $true
-                  $preview = ($badOffsets | Select-Object -First 10) -join ', '
-                  Write-Host "::error file=$($file.FullName)::$($file.Name) contains $($badOffsets.Count) non-ASCII byte(s); first offsets: $preview"
-              } else {
-                  Write-Host "OK: $($file.Name) is ASCII-only."
+                  Write-Host "::error file=$($file.FullName)::$($file.Name) 含 UTF-8 BOM；BAT 必须为无 BOM 的 GBK。"
+                  continue
               }
+              try {
+                  $text = $gbk.GetString($bytes)
+                  $roundTrip = [System.Convert]::ToBase64String($gbk.GetBytes($text))
+                  $original = [System.Convert]::ToBase64String($bytes)
+                  if ($roundTrip -ne $original) {
+                      throw 'GBK 往返编码不一致'
+                  }
+              } catch {
+                  $failed = $true
+                  Write-Host "::error file=$($file.FullName)::$($file.Name) 不是合法的 GBK 字节序列：$($_.Exception.Message)"
+                  continue
+              }
+              Write-Host "OK: $($file.Name) 是合法的 GBK。"
           }
           if ($failed) { exit 1 }
 

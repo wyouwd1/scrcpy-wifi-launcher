@@ -1,4 +1,4 @@
-# BAT 必须保持 ASCII + CRLF，PS1 必须保持 UTF-8 BOM + CRLF。
+# BAT 必须保持 GBK（代码页 936）+ CRLF，PS1 必须保持 UTF-8 BOM + CRLF。
 # 用 -text 关闭换行转换，保证 GitHub raw 下载的内容与仓库文件逐字节一致
 # （install.ps1 会按 SHA256 校验下载到的启动器脚本）。
 *.bat -text

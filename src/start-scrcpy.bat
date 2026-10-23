@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
-title scrcpy launcher
+title scrcpy 启动器
 
 rem ============================================================
-rem scrcpy launcher - WiFi auto-discovery candidate
-rem ASCII only / CRLF. No destructive commands.
+rem scrcpy 启动器 - WiFi 自动发现候选
+rem 本文件使用 GBK 编码 / CRLF 换行。不含破坏性命令。
 rem ============================================================
 
 set "SCRCPY=%~dp0scrcpy.exe"
@@ -31,7 +31,7 @@ set "WIFI_PORT=5555"
 if defined SCRCPY_WIFI_PORT set "WIFI_PORT=%SCRCPY_WIFI_PORT%"
 set "ARGS=%*"
 
-rem --no-pause is a launcher switch; never forward it to scrcpy.
+rem --no-pause 是启动器开关，绝不透传给 scrcpy。
 set "CHECK=!ARGS:"=!"
 set "CHECK= !CHECK! "
 if not "!CHECK: --no-pause =!"=="!CHECK!" (
@@ -40,7 +40,7 @@ if not "!CHECK: --no-pause =!"=="!CHECK!" (
 )
 if /i "%SCRCPY_NO_PAUSE%"=="1" set "DO_PAUSE=0"
 
-rem --no-wifi is a launcher switch; SCRCPY_NO_WIFI=1 has the same effect.
+rem --no-wifi 是启动器开关；SCRCPY_NO_WIFI=1 效果相同。
 if not "!CHECK: --no-wifi =!"=="!CHECK!" (
     set "DO_WIFI=0"
     set "SCRCPY_CONN=usb"
@@ -48,13 +48,13 @@ if not "!CHECK: --no-wifi =!"=="!CHECK!" (
 )
 if /i "%SCRCPY_NO_WIFI%"=="1" set "SCRCPY_CONN=usb"
 
-rem --wifi forces WiFi discovery without showing the menu.
+rem --wifi 强制走 WiFi 发现，不显示菜单。
 if not "!CHECK: --wifi =!"=="!CHECK!" (
     set "SCRCPY_CONN=wifi"
     set "ARGS=!ARGS:--wifi=!"
 )
 
-rem Fast path: help/version do not need a device.
+rem 快速路径：--help/--version 不需要设备。
 set "WANT_HELP=0"
 if not "!CHECK: --help =!"=="!CHECK!" set "WANT_HELP=1"
 if not "!CHECK: -h =!"=="!CHECK!" set "WANT_HELP=1"
@@ -65,16 +65,16 @@ if not exist "%SCRCPY%" goto :err_scrcpy_missing
 if "%WANT_HELP%"=="1" goto :run_help
 if not exist "%ADB%" goto :err_adb_missing
 
-rem Start adb server and fail loudly if it cannot start.
+rem 启动 adb server，失败时明确报错。
 "%ADB%" start-server >nul 2>&1
 if errorlevel 1 goto :err_adb_server
 
-rem Explicit SCRCPY_SERIAL wins and must be validated. No fallback.
+rem SCRCPY_SERIAL 优先且必须校验；不自动回退。
 if defined SCRCPY_SERIAL goto :explicit_serial
 
-rem Let the user pick the transport. Default is USB because Wi-Fi can lag.
-rem Non-interactive runs (--no-pause) skip the prompt and use USB unless
-rem SCRCPY_CONN or --wifi says otherwise.
+rem 让用户选择连接方式。默认 USB，因为 WiFi 可能卡顿。
+rem 非交互运行（--no-pause）跳过菜单直接用 USB，
+rem 除非 SCRCPY_CONN 或 --wifi 另有指定。
 if not defined SCRCPY_CONN (
     if "%DO_PAUSE%"=="1" (
         call :choose_connection
@@ -84,7 +84,7 @@ if not defined SCRCPY_CONN (
 )
 if /i "%SCRCPY_CONN%"=="usb" goto :usb_select
 if /i "%SCRCPY_CONN%"=="wifi" goto :wifi_first
-echo [ERROR] invalid SCRCPY_CONN="%SCRCPY_CONN%" ^(expected wifi or usb^)
+echo [错误] SCRCPY_CONN="%SCRCPY_CONN%" 无效（应为 wifi 或 usb）
 set "RC=1"
 goto :finish_error
 
@@ -95,10 +95,10 @@ if defined WIFI_ENDPOINT (
     set "SERNAME=WIFI"
     goto :select_done
 )
-echo [INFO] WiFi not available; falling back to USB device selection
+echo [信息] WiFi 不可用，回退到 USB 设备选择
 
 :usb_select
-rem Auto-select: count device/unauthorized/offline; prefer USB.
+rem 自动选择：统计 device/unauthorized/offline，优先 USB。
 for /f "skip=1 tokens=1,2" %%A in ('adb.exe devices 2^>nul') do (
     if /i "%%B"=="device" (
         set /a COUNT+=1
@@ -124,38 +124,38 @@ if not defined SERIAL goto :err_no_device
 goto :select_done
 
 rem ------------------------------------------------------------
-rem Connection picker. 1=WiFi, 2=USB (default), Q=quit.
+rem 连接方式选择菜单：1=WiFi，2=USB（默认），Q=退出。
 rem ------------------------------------------------------------
 :choose_connection
 echo.
 echo ===============================
-echo   Select connection
+echo   选择连接方式
 echo ===============================
-echo   1. WiFi  - auto discover ^(may lag^)
-echo   2. USB   - cable, smoother  [default]
-echo   Q. Quit
+echo   1. WiFi  - 自动发现（可能较慢）
+echo   2. USB   - 数据线，更流畅  [默认]
+echo   Q. 退出
 echo.
-choice /c 12q /n /t 15 /d 2 /m "Choice [1/2/Q], default 2 in 15s: "
+choice /c 12q /n /t 15 /d 2 /m "请选择 [1/2/Q]，15 秒内不操作默认 2："
 if "%ERRORLEVEL%"=="3" goto :cancelled
 if "%ERRORLEVEL%"=="1" (
     set "SCRCPY_CONN=wifi"
     exit /b 0
 )
-rem 2 = USB; any choice failure (no console attached) also falls back to USB.
+rem 2 = USB；选择失败（无控制台）也回退到 USB。
 set "SCRCPY_CONN=usb"
 exit /b 0
 
 rem ------------------------------------------------------------
-rem WiFi discovery helper. Sets WIFI_ENDPOINT/WIFI_SOURCE on success.
+rem WiFi 发现辅助脚本。成功时设置 WIFI_ENDPOINT/WIFI_SOURCE。
 rem ------------------------------------------------------------
 :try_wifi
 if not exist "%WIFI_PS1%" (
-    echo [WARN] wifi-discover.ps1 not found; skipping WiFi auto-discovery
+    echo [警告] 未找到 wifi-discover.ps1，跳过 WiFi 自动发现
     exit /b 0
 )
 set "WIFI_TMP=%TEMP%\scrcpy-wifi-%RANDOM%-%RANDOM%.txt"
 set "WIFI_ERR=%TEMP%\scrcpy-wifi-err-%RANDOM%-%RANDOM%.txt"
-echo [INFO] Searching for a WiFi device (up to 14s; use --no-wifi to skip)
+echo [信息] 正在搜索 WiFi 设备（最多 14 秒；可用 --no-wifi 跳过）
 "%PS%" -NoProfile -ExecutionPolicy Bypass -File "%WIFI_PS1%" -AdbPath "%ADB%" -Port "%WIFI_PORT%" -TimeoutSec 5 > "%WIFI_TMP%" 2> "%WIFI_ERR%"
 set "WIFI_RC=%ERRORLEVEL%"
 if exist "%WIFI_TMP%" (
@@ -168,7 +168,7 @@ if exist "%WIFI_TMP%" (
 if not "%WIFI_RC%"=="0" (
     if exist "%WIFI_ERR%" (
         for /f "usebackq delims=" %%L in ("%WIFI_ERR%") do set "WIFI_LAST_ERR=%%L"
-        if defined WIFI_LAST_ERR echo [INFO] WiFi helper: !WIFI_LAST_ERR!
+        if defined WIFI_LAST_ERR echo [信息] WiFi 发现：!WIFI_LAST_ERR!
         del /f /q "%WIFI_ERR%" >nul 2>&1
     )
     set "WIFI_ENDPOINT="
@@ -182,8 +182,8 @@ set "SERIAL=%SCRCPY_SERIAL%"
 set "STATE="
 for /f "delims=" %%S in ('adb.exe -s "%SERIAL%" get-state 2^>nul') do set "STATE=%%S"
 if /i not "%STATE%"=="device" (
-    echo [ERROR] SCRCPY_SERIAL="%SERIAL%" is not online ^(adb get-state: %STATE%^)
-    echo [ERROR] fix or unset SCRCPY_SERIAL; no automatic fallback
+    echo [错误] SCRCPY_SERIAL="%SERIAL%" 不在线（adb get-state: %STATE%）
+    echo [错误] 请修正或取消 SCRCPY_SERIAL；不会自动回退
     "%ADB%" devices
     set "RC=1"
     goto :finish_error
@@ -192,20 +192,20 @@ set "SERNAME=OVERRIDE"
 
 :select_done
 echo ===============================
-echo   scrcpy launcher (MOD = Alt)
+echo   scrcpy 启动器（MOD = Alt 键）
 echo ===============================
 if /i "%SERNAME%"=="OVERRIDE" (
-    echo [INFO] selected by SCRCPY_SERIAL: %SERIAL%
+    echo [信息] 由 SCRCPY_SERIAL 指定：%SERIAL%
 ) else (
     if /i "%SERNAME%"=="WIFI" (
-        echo [INFO] selected WiFi endpoint: %SERIAL%   source: %WIFI_SOURCE%
+        echo [信息] 已选 WiFi 端点：%SERIAL%   来源：%WIFI_SOURCE%
     ) else (
-        echo [INFO] online devices: %COUNT%   selected: %SERNAME%  %SERIAL%
-        echo [INFO] device states: device=%COUNT% unauthorized=%UNAUTH% offline=%OFFLINE%
-        if %COUNT% GTR 1 echo [INFO] multiple devices online, set SCRCPY_SERIAL to choose
+        echo [信息] 在线设备：%COUNT%   已选：%SERNAME%  %SERIAL%
+        echo [信息] 设备状态：device=%COUNT% unauthorized=%UNAUTH% offline=%OFFLINE%
+        if %COUNT% GTR 1 echo [信息] 有多台设备在线，请设置 SCRCPY_SERIAL 指定
     )
 )
-echo [INFO] Alt+o screen off, Alt+Shift+o screen on, Alt+p power
+echo [信息] 快捷键：Alt+o 熄屏，Alt+Shift+o 亮屏，Alt+p 电源键
 echo.
 
 set "WIDTH=%SCRCPY_WIDTH%"
@@ -213,52 +213,52 @@ if not defined WIDTH set "WIDTH=580"
 set "HEIGHT=%SCRCPY_HEIGHT%"
 if not defined HEIGHT set "HEIGHT=1264"
 
-rem Interactive double-click: let scrcpy keep the window only on error.
-rem Official scrcpy option --pause-on-exit=if-error; no unconditional pause.
+rem 交互式双击：只在出错时保留 scrcpy 窗口。
+rem 使用官方参数 --pause-on-exit=if-error，不做无条件暂停。
 set "PAUSE_ARG="
 if "%DO_PAUSE%"=="1" set "PAUSE_ARG=--pause-on-exit=if-error"
 
 "%SCRCPY%" -s "%SERIAL%" "--window-width=%WIDTH%" "--window-height=%HEIGHT%" %PAUSE_ARG% %ARGS%
 set "RC=%ERRORLEVEL%"
-if not "%RC%"=="0" echo [ERROR] scrcpy exited with code %RC%
+if not "%RC%"=="0" echo [错误] scrcpy 退出，代码 %RC%
 exit /b %RC%
 
 :run_help
 "%SCRCPY%" %ARGS%
 set "RC=%ERRORLEVEL%"
-if not "%RC%"=="0" echo [ERROR] scrcpy exited with code %RC%
+if not "%RC%"=="0" echo [错误] scrcpy 退出，代码 %RC%
 exit /b %RC%
 
 :cancelled
-echo [INFO] cancelled by user
+echo [信息] 用户已取消
 exit /b 0
 
 :err_scrcpy_missing
-echo [ERROR] scrcpy.exe not found: "%SCRCPY%"
+echo [错误] 未找到 scrcpy.exe："%SCRCPY%"
 set "RC=1"
 goto :finish_error
 
 :err_adb_missing
-echo [ERROR] adb.exe not found: "%ADB%"
+echo [错误] 未找到 adb.exe："%ADB%"
 set "RC=1"
 goto :finish_error
 
 :err_adb_server
-echo [ERROR] failed to start adb server
+echo [错误] adb server 启动失败
 set "RC=1"
 goto :finish_error
 
 :err_no_device
-echo [ERROR] no adb device in "device" state
-echo [INFO] online=device: %COUNT%   unauthorized: %UNAUTH%   offline: %OFFLINE%
+echo [错误] 没有处于 "device" 状态的 adb 设备
+echo [信息] 在线 device：%COUNT%   unauthorized：%UNAUTH%   offline：%OFFLINE%
 if "%DO_WIFI%"=="1" (
-    echo [INFO] WiFi auto-discovery found no usable endpoint.
-    echo [INFO] First use: enable Wireless debugging on the phone, or connect USB once.
+    echo [信息] WiFi 自动发现未找到可用端点。
+    echo [信息] 首次使用：请在手机上打开"无线调试"，或先连接一次 USB。
 ) else (
-    echo [INFO] WiFi auto-discovery was disabled by --no-wifi or SCRCPY_NO_WIFI=1.
-    echo [INFO] Enable Wireless debugging first, or connect USB once to enable adb tcpip.
+    echo [信息] WiFi 自动发现已被 --no-wifi 或 SCRCPY_NO_WIFI=1 关闭。
+    echo [信息] 请先打开"无线调试"，或连接一次 USB 以启用 adb tcpip。
 )
-echo [INFO] Pairing: adb pair ^<phone-ip^>:^<pair-port^> then enter the code shown on the phone.
+echo [信息] 配对：adb pair ^<手机IP^>:^<配对端口^>，然后输入手机显示的配对码。
 "%ADB%" devices
 set "RC=1"
 goto :finish_error

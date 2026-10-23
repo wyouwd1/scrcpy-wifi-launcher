@@ -4,7 +4,7 @@
 
 ## 检查清单
 
-- [ ] `src/` 下的 BAT 仍为 ASCII-only（无中文、全角符号或其它非 ASCII 字节）
+- [ ] `src/` 下的 BAT 仍为无 BOM 的 GBK 编码（代码页 936，CRLF 换行）
 - [ ] PowerShell 脚本兼容 Windows PowerShell 5.1（未使用 `??`、`?.`、`Join-String` 等 PS 7 专属语法）
 - [ ] 未提交敏感信息（真实内网 IP、设备序列号、`C:\Users\<本机用户名>` 路径）
 - [ ] 未提交 `scrcpy.exe`、`adb.exe` 等二进制文件
