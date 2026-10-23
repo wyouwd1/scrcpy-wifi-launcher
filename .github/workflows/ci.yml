@@ -162,7 +162,7 @@ jobs:
           }
           $results = @()
           foreach ($path in $paths) {
-              $results += @(Invoke-ScriptAnalyzer -Path $path -Severity Error, Warning -ExcludeRules $excludeRules)
+              $results += @(Invoke-ScriptAnalyzer -Path $path -Severity Error, Warning -ExcludeRule $excludeRules)
           }
           $report = if ($results.Count -gt 0) {
               $results | Format-Table -AutoSize | Out-String -Width 4096
