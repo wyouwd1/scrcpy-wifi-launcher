@@ -1,6 +1,7 @@
 # scrcpy-wifi-launcher 持续集成质量门禁
 # 触发：push 到 main、所有 Pull Request、手动 workflow_dispatch
-# 运行环境：Windows PowerShell 5.1（项目最低支持版本）
+# 运行环境：PowerShell 7（pwsh）。内联脚本含中文，PowerShell 5.1 读取
+#            UTF-8 无 BOM 临时文件会乱码，因此 CI 使用 pwsh；5.1 兼容性由本地实测覆盖。
 # 说明：内联 PowerShell 脚本输出刻意保持 ASCII，避免 Windows PowerShell 5.1
 #       按 ANSI 代码页读取 UTF-8 临时脚本时中文乱码。
 name: CI
@@ -21,7 +22,7 @@ permissions:
 
 jobs:
   quality:
-    name: 质量门禁（Windows PowerShell 5.1）
+    name: 质量门禁（PowerShell 7）
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
@@ -29,7 +30,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 校验 src/*.bat 为 ASCII-only
-        shell: powershell
+        shell: pwsh
         run: |
           # 启动 BAT 必须全部是 ASCII 字节，避免 cmd.exe 代码页导致中文乱码。
           # 逐个字节检查，任何 byte > 127 即失败。
@@ -57,7 +58,7 @@ jobs:
           if ($failed) { exit 1 }
 
       - name: 校验 BAT/PS1 为 CRLF
-        shell: powershell
+        shell: pwsh
         run: |
           # 检测孤立 LF（前一个字节不是 CR），即存在非 CRLF 换行就失败。
           $ErrorActionPreference = 'Stop'
@@ -95,7 +96,7 @@ jobs:
           if ($failed) { exit 1 }
 
       - name: 校验安装器内置的 payload 哈希
-        shell: powershell
+        shell: pwsh
         run: |
           # install.ps1 会按内置 SHA256 校验从网络下载的启动器脚本。
           # 一旦 src/ 或 uninstall.ps1 改动而哈希没同步，安装器会在用户机器上失败。
@@ -121,7 +122,7 @@ jobs:
           Write-Host "payload 哈希一致（$($script:PayloadSha256.Count) 个文件）。"
 
       - name: PSScriptAnalyzer 静态检查
-        shell: powershell
+        shell: pwsh
         run: |
           # Error/Warning 级别；排除噪音规则，保留全部安全规则
           # （PSAvoidUsingInvokeExpression、PSAvoidUsingPlainTextForPassword 等）。
@@ -185,7 +186,7 @@ jobs:
           }
 
       - name: 零依赖测试（run-install-tests.ps1）
-        shell: powershell
+        shell: pwsh
         run: |
           # 不依赖 Pester 的纯 PowerShell 断言，任何 Windows 都能跑。
           $ErrorActionPreference = 'Stop'
@@ -201,7 +202,7 @@ jobs:
           }
 
       - name: Pester 测试
-        shell: powershell
+        shell: pwsh
         run: |
           # 仅当 tests/ 下存在 *.Tests.ps1 时运行；结果输出 NUnitXml 供 artifact 上传。
           $ErrorActionPreference = 'Stop'
@@ -237,7 +238,7 @@ jobs:
           Write-Host "Pester passed: $($result.PassedCount) passed, $($result.SkippedCount) skipped."
 
       - name: 敏感信息扫描
-        shell: powershell
+        shell: pwsh
         run: |
           # 扫描仓库文本文件，命中内网 IP、设备序列号、本机用户路径即失败。
           # 排除 .git/ 与 .github/（本文件自身包含这些正则，避免自命中）。
@@ -290,7 +291,7 @@ jobs:
           Write-Host "Sensitive-data scan passed ($($files.Count) files checked)."
 
       - name: 检查 src/ 下无二进制文件
-        shell: powershell
+        shell: pwsh
         run: |
           # 防止误提交 scrcpy.exe、adb.exe、依赖 DLL 或压缩包。
           $ErrorActionPreference = 'Stop'
